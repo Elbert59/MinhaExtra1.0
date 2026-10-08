@@ -395,8 +395,9 @@ async function ensureValidEmpresaId() {
   if (user && user.empresa_id && typeof user.empresa_id === 'number' && user.empresa_id < 2147483647) {
     return user.empresa_id;
   }
+  const fallbackId = (user && user.id) ? user.id : (Date.now() % 1000000 + 1000);
   const supabase = getSupabase();
-  if (!supabase || !user) return user?.id || 1;
+  if (!supabase || !user) return fallbackId;
 
   try {
     // Busca a empresa pertencente estritamente a este usuário logado
@@ -428,10 +429,10 @@ async function ensureValidEmpresaId() {
       }
     }
 
-    return user.id;
+    return fallbackId;
   } catch(e) {
     console.warn('Erro ao verificar empresa_id do usuário:', e);
-    return user?.id || 1;
+    return fallbackId;
   }
 }
 
@@ -441,8 +442,9 @@ async function ensureValidFreelancerId() {
   if (user && user.freelancer_id && typeof user.freelancer_id === 'number' && user.freelancer_id < 2147483647) {
     return user.freelancer_id;
   }
+  const fallbackId = (user && user.id) ? user.id : (Date.now() % 1000000 + 1000);
   const supabase = getSupabase();
-  if (!supabase || !user) return user?.id || 1;
+  if (!supabase || !user) return fallbackId;
 
   try {
     // Busca o perfil de freelancer pertencente estritamente a este usuário logado
@@ -475,10 +477,10 @@ async function ensureValidFreelancerId() {
       }
     }
 
-    return user.id;
+    return fallbackId;
   } catch(e) {
     console.warn('Erro ao verificar freelancer_id do usuário:', e);
-    return user?.id || 1;
+    return fallbackId;
   }
 }
 
