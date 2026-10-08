@@ -5,11 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Minha Extra - Chat Empresa & Freelancer</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Supabase JS CDN Oficial -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>
+        (function() {
+            try {
+                const saved = localStorage.getItem('minha_extra_theme');
+                if (saved === 'dark' || (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            } catch(e) {}
+        })();
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
                     fontFamily: {
@@ -74,8 +82,14 @@
             </div>
         </div>
 
-        <!-- Identidade do Usuário Conectado (Seguro - Sem opção de alternância manual) -->
+        <!-- Identidade do Usuário Conectado e Alternador de Tema -->
         <div class="flex items-center space-x-2 sm:space-x-3">
+            <button type="button" onclick="window.MinhaExtra.ThemeManager.toggleTheme()" class="btn-toggle-theme p-2 rounded-xl text-slate-500 hover:text-indigo-600 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all flex items-center justify-center cursor-pointer shadow-2xs border border-slate-200" title="Alternar tema claro/escuro" aria-label="Alternar tema">
+                <span class="theme-icon">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                </span>
+            </button>
+
             <div id="user-identity-badge" class="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl shadow-2xs">
                 <span id="user-role-icon" class="text-base">🏢</span>
                 <div class="flex flex-col text-right">
@@ -312,6 +326,7 @@
             
             // Prioridade de segurança: perfil autenticado na sessão ativa do usuário (inviolável)
             isEmpresaMode = (user.tipo_perfil === 'empresa');
+            const isDemo = !!user.isDemo;
             
             const params = new URLSearchParams(window.location.search);
             const targetFreeId = params.get('freelancer_id');
@@ -321,10 +336,10 @@
             // Atualiza UI com o perfil correto e navegação correspondente
             setupUserRoleUI();
 
-            // Configura a lista de contatos estritamente filtrada
+            // Configura a lista de contatos: contas demo usam lista modelo; contas reais começam vazias
             if (isEmpresaMode) {
-                // Modo EMPRESA: Apenas freelancers são contatos
-                contatosAtuais = [...CONTATOS_FREELANCERS_BASE];
+                // Modo EMPRESA
+                contatosAtuais = isDemo ? [...CONTATOS_FREELANCERS_BASE] : [];
                 if (targetFreeId) {
                     const found = contatosAtuais.find(c => String(c.id) === String(targetFreeId));
                     if (found) {
@@ -341,11 +356,11 @@
                         currentActiveContact = novo;
                     }
                 } else {
-                    currentActiveContact = contatosAtuais[0];
+                    currentActiveContact = contatosAtuais[0] || null;
                 }
             } else {
-                // Modo FREELANCER: Apenas empresas são contatos
-                contatosAtuais = [...CONTATOS_EMPRESAS_BASE];
+                // Modo FREELANCER
+                contatosAtuais = isDemo ? [...CONTATOS_EMPRESAS_BASE] : [];
                 if (targetEmpId) {
                     const found = contatosAtuais.find(c => String(c.id) === String(targetEmpId));
                     if (found) {
@@ -362,7 +377,7 @@
                         currentActiveContact = novaEmp;
                     }
                 } else {
-                    currentActiveContact = contatosAtuais[0];
+                    currentActiveContact = contatosAtuais[0] || null;
                 }
             }
 
@@ -459,30 +474,35 @@
                 if (store && store[convKey] && Array.isArray(store[convKey]) && store[convKey].length > 0) {
                     return store[convKey];
                 }
+            } catch(e) {}
+
+            const user = window.MinhaExtra.SessionManager.getUser() || {};
+            // Mensagens modelo apenas para contas de teste/demo
+            if (user.isDemo) {
                 if (DEFAULT_CONVERSATIONS[convKey]) {
                     return DEFAULT_CONVERSATIONS[convKey];
                 }
-            } catch(e) {}
-
-            const contactObj = targetContact || currentActiveContact;
-            const contactName = contactObj ? contactObj.nome : (isEmpresaMode ? 'Profissional' : 'Empresa');
-
-            if (isEmpresaMode) {
-                return [
-                    { senderType: 'empresa', senderName: 'Restaurante Sabor do Mar', text: `Olá ${contactName}! Vimos sua disponibilidade registrada no Minha Extra.`, time: '10:00' },
-                    { senderType: 'freelancer', senderName: contactName, text: 'Olá! Sim, tenho total disponibilidade para o turno.', time: '10:02' }
-                ];
-            } else {
-                return [
-                    { senderType: 'empresa', senderName: contactName, text: 'Olá! Conectamos você ao nosso estabelecimento no Minha Extra.', time: '10:00' },
-                    { senderType: 'freelancer', senderName: 'Elbert Figueiredo', text: 'Olá! Tenho interesse nas oportunidades divulgadas por vocês.', time: '10:02' }
-                ];
+                const contactObj = targetContact || currentActiveContact;
+                const contactName = contactObj ? contactObj.nome : (isEmpresaMode ? 'Profissional' : 'Empresa');
+                if (isEmpresaMode) {
+                    return [
+                        { senderType: 'empresa', senderName: 'Restaurante Sabor do Mar', text: `Olá ${contactName}! Vimos sua disponibilidade registrada no Minha Extra.`, time: '10:00' },
+                        { senderType: 'freelancer', senderName: contactName, text: 'Olá! Sim, tenho total disponibilidade para o turno.', time: '10:02' }
+                    ];
+                } else {
+                    return [
+                        { senderType: 'empresa', senderName: contactName, text: 'Olá! Conectamos você ao nosso estabelecimento no Minha Extra.', time: '10:00' },
+                        { senderType: 'freelancer', senderName: 'Elbert Figueiredo', text: 'Olá! Tenho interesse nas oportunidades divulgadas por vocês.', time: '10:02' }
+                    ];
+                }
             }
+
+            return [];
         }
 
         function saveMessage(convKey, msgObj) {
             const store = JSON.parse(localStorage.getItem('minha_extra_chat_store') || '{}');
-            const list = store[convKey] || (DEFAULT_CONVERSATIONS[convKey] ? [...DEFAULT_CONVERSATIONS[convKey]] : []);
+            const list = store[convKey] || [];
             list.push(msgObj);
             store[convKey] = list;
             localStorage.setItem('minha_extra_chat_store', JSON.stringify(store));
@@ -492,6 +512,19 @@
             const container = document.getElementById('contacts-container');
             if (!container) return;
             container.innerHTML = '';
+
+            if (contatosAtuais.length === 0) {
+                container.innerHTML = `
+                    <div class="p-8 text-center text-slate-400">
+                        <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-2 text-slate-400">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                        </div>
+                        <p class="text-xs font-bold text-slate-700 mb-1">Nenhuma conversa recente</p>
+                        <p class="text-[11px] text-slate-500">Inicie um bate-papo a partir das vagas ou candidaturas.</p>
+                    </div>
+                `;
+                return;
+            }
 
             contatosAtuais.forEach(contato => {
                 const isSelected = currentActiveContact && currentActiveContact.id === contato.id;

@@ -389,97 +389,96 @@ function cleanCorruptedLocalVagas() {
 }
 cleanCorruptedLocalVagas();
 
-// Helper para garantir que haja um empresa_id válido no banco
+// Helper para garantir que haja um empresa_id válido exclusivo para o usuário
 async function ensureValidEmpresaId() {
   const user = SessionManager.getUser();
   if (user && user.empresa_id && typeof user.empresa_id === 'number' && user.empresa_id < 2147483647) {
     return user.empresa_id;
   }
   const supabase = getSupabase();
-  if (!supabase) return 1;
+  if (!supabase || !user) return user?.id || 1;
 
   try {
-    // Busca qualquer empresa existente
-    const { data: empresas } = await supabase.from('empresas').select('id').limit(1);
-    if (empresas && empresas.length > 0) {
-      if (user) {
-        user.empresa_id = empresas[0].id;
+    // Busca a empresa pertencente estritamente a este usuário logado
+    if (user.id) {
+      const { data: minhaEmp } = await supabase
+        .from('empresas')
+        .select('id')
+        .eq('usuario_id', user.id)
+        .maybeSingle();
+
+      if (minhaEmp && minhaEmp.id) {
+        user.empresa_id = minhaEmp.id;
         SessionManager.setUser(user);
+        return minhaEmp.id;
       }
-      return empresas[0].id;
+
+      // Se ainda não tiver registro na tabela empresas, cria exclusivamente para este usuário
+      const { data: createdEmp } = await supabase.from('empresas').insert([{
+        usuario_id: user.id,
+        razao_social: user.razao_social || 'Minha Empresa',
+        cnpj: user.cnpj || '',
+        endereco: user.endereco || user.cidade_atuacao || 'Maringá - PR'
+      }]).select();
+
+      if (createdEmp && createdEmp[0]) {
+        user.empresa_id = createdEmp[0].id;
+        SessionManager.setUser(user);
+        return createdEmp[0].id;
+      }
     }
 
-    // Se não houver empresa, cria uma padrão
-    const { data: newUser } = await supabase.from('usuarios').insert([{
-      email: 'contato@sabordomar.com',
-      senha_hash: '123456',
-      tipo_perfil: 'empresa'
-    }]).select();
-
-    const uId = (newUser && newUser[0]) ? newUser[0].id : 1;
-    const { data: newEmp } = await supabase.from('empresas').insert([{
-      usuario_id: uId,
-      razao_social: 'Restaurante Sabor do Mar',
-      cnpj: '12.345.678/0001-90',
-      endereco: 'Maringá - PR'
-    }]).select();
-
-    const eId = (newEmp && newEmp[0]) ? newEmp[0].id : 1;
-    if (user) {
-      user.empresa_id = eId;
-      SessionManager.setUser(user);
-    }
-    return eId;
+    return user.id;
   } catch(e) {
-    console.warn('Erro ao garantir empresa_id:', e);
-    return 1;
+    console.warn('Erro ao verificar empresa_id do usuário:', e);
+    return user?.id || 1;
   }
 }
 
-// Helper para garantir que haja um freelancer_id válido no banco
+// Helper para garantir que haja um freelancer_id válido exclusivo para o usuário
 async function ensureValidFreelancerId() {
   const user = SessionManager.getUser();
   if (user && user.freelancer_id && typeof user.freelancer_id === 'number' && user.freelancer_id < 2147483647) {
     return user.freelancer_id;
   }
   const supabase = getSupabase();
-  if (!supabase) return 1;
+  if (!supabase || !user) return user?.id || 1;
 
   try {
-    const { data: freelancers } = await supabase.from('freelancers').select('id').limit(1);
-    if (freelancers && freelancers.length > 0) {
-      if (user) {
-        user.freelancer_id = freelancers[0].id;
+    // Busca o perfil de freelancer pertencente estritamente a este usuário logado
+    if (user.id) {
+      const { data: meuFree } = await supabase
+        .from('freelancers')
+        .select('id')
+        .eq('usuario_id', user.id)
+        .maybeSingle();
+
+      if (meuFree && meuFree.id) {
+        user.freelancer_id = meuFree.id;
         SessionManager.setUser(user);
+        return meuFree.id;
       }
-      return freelancers[0].id;
+
+      // Se ainda não tiver registro em freelancers, cria exclusivamente para este usuário
+      const { data: createdFree } = await supabase.from('freelancers').insert([{
+        usuario_id: user.id,
+        nome_completo: user.nome_completo || 'Freelancer',
+        cpf_mei: user.cpf_mei || '',
+        especialidade: user.especialidade || 'Gastronomia',
+        chave_pix: user.chave_pix || ''
+      }]).select();
+
+      if (createdFree && createdFree[0]) {
+        user.freelancer_id = createdFree[0].id;
+        SessionManager.setUser(user);
+        return createdFree[0].id;
+      }
     }
 
-    // Cria freelancer padrão se a tabela estiver vazia
-    const { data: newUser } = await supabase.from('usuarios').insert([{
-      email: 'freelancer.padrao@minhaextra.com',
-      senha_hash: '123456',
-      tipo_perfil: 'freelancer'
-    }]).select();
-
-    const uId = (newUser && newUser[0]) ? newUser[0].id : 1;
-    const { data: newFree } = await supabase.from('freelancers').insert([{
-      usuario_id: uId,
-      nome_completo: 'Elbert Figueiredo',
-      cpf_mei: '123.456.789-00',
-      especialidade: 'Sushiman / Culinária Oriental',
-      chave_pix: 'elbert@email.com'
-    }]).select();
-
-    const fId = (newFree && newFree[0]) ? newFree[0].id : 1;
-    if (user) {
-      user.freelancer_id = fId;
-      SessionManager.setUser(user);
-    }
-    return fId;
+    return user.id;
   } catch(e) {
-    console.warn('Erro ao garantir freelancer_id:', e);
-    return 1;
+    console.warn('Erro ao verificar freelancer_id do usuário:', e);
+    return user?.id || 1;
   }
 }
 
@@ -989,7 +988,7 @@ const NotificationManager = {
     try {
       const data = JSON.parse(localStorage.getItem(this.STORAGE_KEY) || '[]');
       if (empresaId) {
-        return data.filter(n => !n.empresa_id || n.empresa_id === empresaId);
+        return data.filter(n => n.empresa_id === empresaId);
       }
       return data;
     } catch(e) {
@@ -1020,7 +1019,7 @@ const NotificationManager = {
         .limit(40);
 
       if (empresaId && typeof empresaId === 'number' && empresaId < 2147483647) {
-        query = query.or(`empresa_id.eq.${empresaId},empresa_id.is.null`);
+        query = query.eq('empresa_id', empresaId);
       }
 
       const { data, error } = await query;
@@ -1186,6 +1185,231 @@ function gerarPixCopiaECola(valor, idTransacao, descricao = 'Minha Extra Vaga') 
   return `00020126580014br.gov.bcb.pix0114${chave}0216${descricao.slice(0, 16)}5204000053039865406${valorFormatado.padStart(6, '0')}5802BR5916MINHA EXTRA LTDA6007MARINGA62070503***6304${txid}`;
 }
 
+// ===============================================================
+// GERENCIADOR DE TEMA CLARO / ESCURO (LIGHT & DARK MODE)
+// ===============================================================
+const ThemeManager = {
+  THEME_KEY: 'minha_extra_theme',
+
+  init() {
+    this.injectDarkStyles();
+    this.applyTheme(this.getTheme());
+    
+    // Escuta mudança de preferência do sistema operacional
+    if (window.matchMedia) {
+      try {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+          if (!localStorage.getItem(this.THEME_KEY)) {
+            this.applyTheme(e.matches ? 'dark' : 'light');
+          }
+        });
+      } catch(e) {}
+    }
+
+    // Atualiza botões no DOMContentLoaded caso os botões tenham sido criados depois
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        this.updateToggleButtons(this.getTheme() === 'dark');
+      });
+    } else {
+      this.updateToggleButtons(this.getTheme() === 'dark');
+    }
+  },
+
+  getTheme() {
+    try {
+      const saved = localStorage.getItem(this.THEME_KEY);
+      if (saved === 'dark' || saved === 'light') return saved;
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        return 'dark';
+      }
+    } catch(e) {}
+    return 'light';
+  },
+
+  setTheme(theme) {
+    try {
+      localStorage.setItem(this.THEME_KEY, theme);
+    } catch(e) {}
+    this.applyTheme(theme);
+  },
+
+  toggleTheme() {
+    const current = this.getTheme();
+    const next = current === 'dark' ? 'light' : 'dark';
+    this.setTheme(next);
+    return next;
+  },
+
+  applyTheme(theme) {
+    const isDark = theme === 'dark';
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    this.updateToggleButtons(isDark);
+    try {
+      window.dispatchEvent(new CustomEvent('minha_extra_theme_changed', { detail: { theme, isDark } }));
+    } catch(e) {}
+  },
+
+  updateToggleButtons(isDark) {
+    document.querySelectorAll('.btn-toggle-theme').forEach(btn => {
+      const icon = btn.querySelector('.theme-icon');
+      const text = btn.querySelector('.theme-text');
+      if (icon) {
+        icon.innerHTML = isDark 
+          ? `<svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>`
+          : `<svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>`;
+      }
+      if (text) {
+        text.innerText = isDark ? 'Modo Claro' : 'Modo Escuro';
+      }
+      btn.setAttribute('title', isDark ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro');
+      btn.setAttribute('aria-label', isDark ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro');
+    });
+  },
+
+  injectDarkStyles() {
+    if (document.getElementById('minha-extra-dark-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'minha-extra-dark-styles';
+    style.innerHTML = `
+      body, header, aside, nav, section, main, div, input, textarea, select {
+        transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+      }
+      
+      html.dark body {
+        background-color: #0b0f19 !important;
+        color: #f1f5f9 !important;
+      }
+
+      html.dark .bg-white {
+        background-color: #151d30 !important;
+        color: #f8fafc !important;
+      }
+
+      html.dark .bg-slate-50,
+      html.dark .bg-slate-100 {
+        background-color: #0b0f19 !important;
+      }
+
+      html.dark .bg-slate-50\\/50,
+      html.dark .bg-slate-50\\/60,
+      html.dark .bg-slate-50\\/70,
+      html.dark .bg-slate-50\\/80 {
+        background-color: #111827 !important;
+      }
+
+      html.dark .text-slate-900 {
+        color: #f8fafc !important;
+      }
+
+      html.dark .text-slate-800 {
+        color: #e2e8f0 !important;
+      }
+
+      html.dark .text-slate-700 {
+        color: #cbd5e1 !important;
+      }
+
+      html.dark .text-slate-600 {
+        color: #94a3b8 !important;
+      }
+
+      html.dark .text-slate-500 {
+        color: #94a3b8 !important;
+      }
+
+      html.dark .text-slate-400 {
+        color: #64748b !important;
+      }
+
+      html.dark .border-slate-100,
+      html.dark .border-slate-200,
+      html.dark .border-slate-300,
+      html.dark .divide-slate-100,
+      html.dark .divide-slate-200 {
+        border-color: #1e293b !important;
+      }
+
+      html.dark input:not([type="checkbox"]):not([type="radio"]),
+      html.dark textarea,
+      html.dark select {
+        background-color: #1e293b !important;
+        border-color: #334155 !important;
+        color: #f8fafc !important;
+      }
+
+      html.dark input::placeholder,
+      html.dark textarea::placeholder {
+        color: #64748b !important;
+      }
+
+      html.dark .shadow-sm,
+      html.dark .shadow-md,
+      html.dark .shadow-lg,
+      html.dark .shadow-xl {
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5) !important;
+      }
+
+      html.dark .hover\\:bg-slate-50:hover,
+      html.dark .hover\\:bg-slate-100:hover {
+        background-color: #1e293b !important;
+      }
+
+      html.dark .bg-indigo-50 {
+        background-color: rgba(99, 102, 241, 0.16) !important;
+        color: #c7d2fe !important;
+      }
+
+      html.dark .bg-emerald-50,
+      html.dark .bg-green-50 {
+        background-color: rgba(16, 185, 129, 0.16) !important;
+        color: #a7f3d0 !important;
+      }
+
+      html.dark .bg-rose-50,
+      html.dark .bg-red-50 {
+        background-color: rgba(244, 63, 94, 0.16) !important;
+        color: #fecdd3 !important;
+      }
+
+      html.dark .bg-amber-50,
+      html.dark .bg-yellow-50 {
+        background-color: rgba(245, 158, 11, 0.16) !important;
+        color: #fde68a !important;
+      }
+
+      html.dark .border-indigo-100,
+      html.dark .border-indigo-200 {
+        border-color: rgba(99, 102, 241, 0.3) !important;
+      }
+
+      html.dark .border-emerald-200,
+      html.dark .border-green-200 {
+        border-color: rgba(16, 185, 129, 0.3) !important;
+      }
+
+      html.dark header,
+      html.dark nav {
+        border-color: #1e293b !important;
+      }
+
+      html.dark .bg-white\\/95,
+      html.dark .bg-white\\/90,
+      html.dark .bg-white\\/80 {
+        background-color: rgba(21, 29, 48, 0.95) !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+};
+
+// Inicializa o tema imediatamente
+ThemeManager.init();
+
 // Exporta para uso global no Vanilla JS
 window.MinhaExtra = {
   SUPABASE_URL,
@@ -1198,6 +1422,7 @@ window.MinhaExtra = {
   RateLimiter,
   ValidadorDocumentos,
   NotificationManager,
+  ThemeManager,
   gerarPixCopiaECola,
   handleSupabaseError,
   showRlsModal,

@@ -5,11 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Minha Extra - Painel da Empresa</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Supabase JS CDN Oficial -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>
+        (function() {
+            try {
+                const saved = localStorage.getItem('minha_extra_theme');
+                if (saved === 'dark' || (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            } catch(e) {}
+        })();
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
                     fontFamily: {
@@ -108,6 +116,13 @@
             </div>
             
             <div class="flex items-center space-x-2 sm:space-x-3">
+                <!-- Botão de Alternar Modo Claro/Escuro -->
+                <button type="button" onclick="window.MinhaExtra.ThemeManager.toggleTheme()" class="btn-toggle-theme p-2 rounded-xl text-slate-500 hover:text-indigo-600 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all flex items-center justify-center cursor-pointer shadow-2xs border border-slate-200" title="Alternar tema claro/escuro" aria-label="Alternar tema">
+                    <span class="theme-icon">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                    </span>
+                </button>
+
                 <!-- Botão de Editar Perfil da Empresa (Desktop/Tablet) -->
                 <button type="button" onclick="abrirModalPerfilEmpresa()" class="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-all cursor-pointer border border-slate-200" title="Editar Perfil da Empresa">
                     <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
@@ -1343,43 +1358,49 @@
             `;
 
             const supabase = window.MinhaExtra.getSupabase();
+            const user = window.MinhaExtra.SessionManager.getUser();
+            const empresaId = user?.empresa_id || user?.id;
 
             try {
-                // 1. Busca todas as vagas do banco
-                const { data: vagas, error: errVagas } = await supabase
-                    .from('vagas')
-                    .select('*')
-                    .order('id', { ascending: false });
+                // 1. Busca estritamente as vagas desta empresa autenticada
+                let vagas = [];
+                if (empresaId) {
+                    const { data: vData, error: errVagas } = await supabase
+                        .from('vagas')
+                        .select('*')
+                        .eq('empresa_id', empresaId)
+                        .order('id', { ascending: false });
 
-                if (errVagas) {
-                    window.MinhaExtra.handleSupabaseError(errVagas, 'Vagas');
+                    if (errVagas) {
+                        window.MinhaExtra.handleSupabaseError(errVagas, 'Vagas');
+                    }
+                    vagas = vData || [];
                 }
 
-                // 2. Busca candidaturas com dados dos freelancers e das vagas
-                const { data: candidaturas, error: errCand } = await supabase
-                    .from('candidaturas')
-                    .select('*, vagas(*), freelancers(*)')
-                    .order('id', { ascending: false });
-
-                allCandidaturas = candidaturas || [];
-
-                // 3. Mescla com vagas locais seguras
+                // 2. Mescla com vagas locais salvas especificamente para esta empresa
                 const rawLocalVagas = JSON.parse(localStorage.getItem('minha_extra_vagas_local') || '[]');
-                const localVagas = rawLocalVagas.filter(v => typeof v.id === 'number' && v.id < 2147483647);
-                localStorage.setItem('minha_extra_vagas_local', JSON.stringify(localVagas));
+                const localVagas = rawLocalVagas.filter(v => typeof v.id === 'number' && v.id < 2147483647 && (!v.empresa_id || v.empresa_id === empresaId));
 
-                const idsExistentes = new Set((vagas || []).map(v => v.id));
-                allVagas = [...(vagas || [])];
+                const idsExistentes = new Set(vagas.map(v => v.id));
+                allVagas = [...vagas];
                 for (const lv of localVagas) {
                     if (!idsExistentes.has(lv.id)) {
                         allVagas.push(lv);
                     }
                 }
 
-                // Se banco estiver vazio, adiciona a primeira vaga modelo
-                if (allVagas.length === 0) {
-                    await criarPrimeiraVagaExemplo();
-                    return;
+                // 3. Busca candidaturas com dados dos freelancers APENAS para as vagas pertencentes a esta empresa
+                if (allVagas.length > 0) {
+                    const idsVagasEmpresa = allVagas.map(v => v.id);
+                    const { data: candidaturas, error: errCand } = await supabase
+                        .from('candidaturas')
+                        .select('*, vagas(*), freelancers(*)')
+                        .in('vaga_id', idsVagasEmpresa)
+                        .order('id', { ascending: false });
+
+                    allCandidaturas = candidaturas || [];
+                } else {
+                    allCandidaturas = [];
                 }
 
                 // Atualiza contadores e métricas do painel
@@ -1389,6 +1410,11 @@
 
             } catch (err) {
                 console.warn('Erro ao carregar dados da empresa:', err);
+                allVagas = [];
+                allCandidaturas = [];
+                atualizarMetricas();
+                renderizarListaVagas();
+                renderizarListaCandidaturas();
             }
         }
 
@@ -2025,23 +2051,7 @@
                 realtimeInicializado = true;
             }
 
-            // Se o banco estiver completamente vazio, insere a primeira notificação modelo na tabela
-            if (!list || list.length === 0) {
-                await window.MinhaExtra.NotificationManager.addNotification({
-                    titulo: '🎉 Anúncio Aceito por Freelancer!',
-                    mensagem: 'Kenji Moto aceitou o contrato digital e confirmou presença para a vaga "Sushiman para Noite de Evento".',
-                    tipo: 'anuncio_aceito',
-                    vaga_id: 101,
-                    vaga_titulo: 'Sushiman para Noite de Evento',
-                    freelancer_nome: 'Kenji Moto',
-                    valor: 350.00,
-                    empresa_id: empresaId,
-                    metadados: {
-                        hora: '14:35'
-                    }
-                });
-                list = window.MinhaExtra.NotificationManager.getNotifications(empresaId);
-            }
+            if (!list) list = [];
 
             const unreadCount = list.filter(n => !n.lida).length;
             const badgeSino = document.getElementById('notif-badge');

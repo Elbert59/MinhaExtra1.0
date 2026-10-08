@@ -9,6 +9,21 @@
     <meta property="og:description" content="Conectando empresas e profissionais freelancers no setor de gastronomia e eventos com Supabase." />
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        (function() {
+            try {
+                const saved = localStorage.getItem('minha_extra_theme');
+                if (saved === 'dark' || (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            } catch(e) {}
+        })();
+        tailwind.config = {
+            darkMode: 'class'
+        };
+    </script>
     <!-- Supabase JS CDN Oficial -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -73,16 +88,23 @@
     <!-- CONTAINER PRINCIPAL -->
     <div class="max-w-2xl w-full bg-white rounded-2xl shadow-xl overflow-hidden p-6 sm:p-8 transition-all duration-300 relative">
         
-        <!-- Status de Conexão Supabase Badge -->
-        <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 text-xs text-slate-500">
+        <!-- Status de Conexão Supabase Badge e Alternador de Tema -->
+        <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-800 text-xs text-slate-500">
             <span class="flex items-center font-medium">
                 <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block mr-1.5 animate-pulse"></span>
                 Supabase Conectado
             </span>
-            <button onclick="window.MinhaExtra.showRlsModal()" class="text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1 font-semibold">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                Configurar Políticas RLS
-            </button>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="window.MinhaExtra.ThemeManager.toggleTheme()" class="btn-toggle-theme p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 bg-slate-100 hover:bg-slate-200 transition-all flex items-center justify-center cursor-pointer" title="Alternar tema claro/escuro" aria-label="Alternar tema">
+                    <span class="theme-icon">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                    </span>
+                </button>
+                <button onclick="window.MinhaExtra.showRlsModal()" class="text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1 font-semibold">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Configurar Políticas RLS
+                </button>
+            </div>
         </div>
 
         <!-- ========================================== -->
@@ -622,11 +644,11 @@
                         if (empresaError && empresaError.code !== '23505') {
                             window.MinhaExtra.handleSupabaseError(empresaError, 'Cadastro Empresa - empresas');
                         }
-                        empresaId = empresaData && empresaData[0] ? empresaData[0].id : 1;
+                        empresaId = empresaData && empresaData[0] ? empresaData[0].id : newUserId;
                     }
                 }
 
-                // 3. Salvar sessão local segura e autenticada
+                // 3. Salvar sessão local segura e autenticada (nova conta inicia limpa)
                 window.MinhaExtra.SessionManager.setUser({
                     id: newUserId,
                     empresa_id: empresaId,
@@ -636,7 +658,8 @@
                     cnpj: cnpj,
                     endereco: endereco,
                     cidade_atuacao: cidadeAtuacao || endereco,
-                    cep: cepEmpresa
+                    cep: cepEmpresa,
+                    isDemo: false
                 });
 
                 text.innerText = 'Conta Conectada!';
@@ -822,11 +845,11 @@
                         if (freeError && freeError.code !== '23505') {
                             window.MinhaExtra.handleSupabaseError(freeError, 'Cadastro Freelancer - freelancers');
                         }
-                        freelancerId = freelancerData && freelancerData[0] ? freelancerData[0].id : 1;
+                        freelancerId = freelancerData && freelancerData[0] ? freelancerData[0].id : newUserId;
                     }
                 }
 
-                // 3. Salvar sessão autenticada de forma segura
+                // 3. Salvar sessão autenticada de forma segura (nova conta inicia limpa)
                 window.MinhaExtra.SessionManager.setUser({
                     id: newUserId,
                     freelancer_id: freelancerId,
@@ -837,7 +860,8 @@
                     chave_pix: chavePix,
                     cidade_atuacao: cidadeAtuacao || 'Maringá - PR',
                     cidade: cidadeAtuacao || 'Maringá - PR',
-                    cep: cepFreelance
+                    cep: cepFreelance,
+                    isDemo: false
                 });
 
                 text.innerText = 'Perfil Conectado!';
@@ -935,12 +959,13 @@
 
                     window.MinhaExtra.SessionManager.setUser({
                         id: user.id,
-                        empresa_id: emp ? emp.id : 1,
+                        empresa_id: emp ? emp.id : user.id,
                         email: user.email,
                         tipo_perfil: 'empresa',
-                        razao_social: emp ? emp.razao_social : 'Restaurante Parceiro',
+                        razao_social: emp ? emp.razao_social : 'Minha Empresa',
                         cnpj: emp ? emp.cnpj : '',
-                        endereco: emp ? emp.endereco : 'Maringá - PR'
+                        endereco: emp ? emp.endereco : 'Maringá - PR',
+                        isDemo: false
                     });
                     window.location.href = 'dashboard-empresa.html';
                 } else {
@@ -952,12 +977,13 @@
 
                     window.MinhaExtra.SessionManager.setUser({
                         id: user.id,
-                        freelancer_id: free ? free.id : 1,
+                        freelancer_id: free ? free.id : user.id,
                         email: user.email,
                         tipo_perfil: 'freelancer',
                         nome_completo: free ? free.nome_completo : 'Profissional Freelancer',
                         especialidade: free ? free.especialidade : 'Gastronomia',
-                        chave_pix: free ? free.chave_pix : ''
+                        chave_pix: free ? free.chave_pix : '',
+                        isDemo: false
                     });
                     window.location.href = 'dashboard.html';
                 }
@@ -999,7 +1025,8 @@
                     tipo_perfil: 'empresa',
                     razao_social: 'Restaurante Sabor do Mar',
                     cnpj: '12.345.678/0001-90',
-                    endereco: 'Maringá - PR'
+                    endereco: 'Maringá - PR',
+                    isDemo: true
                 });
                 window.location.href = 'dashboard-empresa.html';
             } else {
@@ -1011,7 +1038,8 @@
                     tipo_perfil: 'freelancer',
                     nome_completo: 'Elbert Figueiredo',
                     especialidade: 'Sushiman / Culinária Oriental',
-                    chave_pix: 'elbert@email.com'
+                    chave_pix: 'elbert@email.com',
+                    isDemo: true
                 });
                 window.location.href = 'dashboard.html';
             }
